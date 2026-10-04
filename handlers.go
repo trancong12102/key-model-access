@@ -97,7 +97,7 @@ func managementRegistration() managementRegistrationResponse {
 		},
 		Resources: []resourceRoute{{
 			Path:        "/settings",
-			Menu:        "模型权限",
+			Menu:        "Model Access",
 			Description: "Manage per-key model access policies in a browser.",
 		}},
 	}

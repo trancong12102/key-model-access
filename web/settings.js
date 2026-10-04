@@ -118,18 +118,18 @@
 
   function normalizePolicyDocument(raw) {
     if (!raw || typeof raw !== "object" || raw.version !== 2 || !Array.isArray(raw.policies)) {
-      throw new Error("插件返回了无效的 v2 策略文档。");
+      throw new Error("The plugin returned an invalid v2 policy document.");
     }
     const seen = new Set();
     const policies = raw.policies.map((item, index) => {
-      if (!item || typeof item !== "object") throw new Error(`策略 ${index + 1} 格式无效。`);
+      if (!item || typeof item !== "object") throw new Error(`Policy ${index + 1} is malformed.`);
       const scope = typeof item.caller_scope === "string" ? item.caller_scope.trim().toLowerCase() : "";
-      if (!/^[0-9a-f]{64}$/.test(scope)) throw new Error(`策略 ${index + 1} 的 caller scope 无效。`);
-      if (seen.has(scope)) throw new Error(`策略 ${index + 1} 的 caller scope 重复。`);
+      if (!/^[0-9a-f]{64}$/.test(scope)) throw new Error(`Policy ${index + 1} has an invalid caller scope.`);
+      if (seen.has(scope)) throw new Error(`Policy ${index + 1} has a duplicate caller scope.`);
       seen.add(scope);
       for (const field of ["allow_models", "deny_models"]) {
         if (!Array.isArray(item[field]) || item[field].some((model) => typeof model !== "string" || !model.trim())) {
-          throw new Error(`策略 ${index + 1} 的 ${field} 无效。`);
+          throw new Error(`Policy ${index + 1} has an invalid ${field}.`);
         }
       }
       return {
@@ -171,14 +171,14 @@
       try { payload = await response.json(); } catch (_) { payload = null; }
       if (!response.ok) {
         const detail = payload && (payload.error?.message || payload.error);
-        const error = new Error(detail ? String(detail) : `请求失败（HTTP ${response.status}）`);
+        const error = new Error(detail ? String(detail) : `Request failed (HTTP ${response.status})`);
         error.status = response.status;
         throw error;
       }
       return payload;
     } catch (error) {
       if (error.name === "AbortError") {
-        const timeoutError = new Error(method === "GET" ? "CPA 响应超时，请检查服务状态。" : "操作响应超时，提交结果尚未确认。");
+        const timeoutError = new Error(method === "GET" ? "CPA timed out. Check that the service is up." : "The operation timed out; whether it was applied is not yet confirmed.");
         timeoutError.code = "timeout";
         throw timeoutError;
       }
@@ -254,7 +254,7 @@
   }
 
   async function fetchModelCatalog(apiKey) {
-    if (!apiKey) return { models: [], error: "CPA 当前没有可用于读取模型目录的 API Key。" };
+    if (!apiKey) return { models: [], error: "CPA has no API key that can be used to read the model catalogue." };
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 12000);
     try {
@@ -266,7 +266,7 @@
       });
       let payload = null;
       try { payload = await response.json(); } catch (_) { payload = null; }
-      if (!response.ok) throw new Error(`模型目录请求失败（HTTP ${response.status}）`);
+      if (!response.ok) throw new Error(`Model catalogue request failed (HTTP ${response.status})`);
       const source = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.models) ? payload.models : [];
       const seen = new Set();
       const models = source.map((item) => {
@@ -282,10 +282,10 @@
         seen.add(key);
         return true;
       }).sort((left, right) => left.id.localeCompare(right.id));
-      return { models, error: models.length ? "" : "CPA 的 /v1/models 暂未返回可用模型。" };
+      return { models, error: models.length ? "" : "CPA's /v1/models returned no models yet." };
     } catch (error) {
-      const message = error.name === "AbortError" ? "模型目录加载超时。" : error.message;
-      return { models: [], error: message || "模型目录加载失败。" };
+      const message = error.name === "AbortError" ? "Loading the model catalogue timed out." : error.message;
+      return { models: [], error: message || "Failed to load the model catalogue." };
     } finally {
       window.clearTimeout(timer);
     }
@@ -294,7 +294,7 @@
   async function fetchCurrentKeys(options = {}) {
     const payload = await api(PATHS.apiKeys, { method: "GET" });
     const values = Array.isArray(payload?.["api-keys"]) ? payload["api-keys"] : null;
-    if (!values) throw new Error("CPA 返回了无法识别的 API Key 列表。");
+    if (!values) throw new Error("CPA returned an API key list in an unrecognised format.");
 
     const temporaryValues = values.slice();
     const normalizedValues = temporaryValues.map((value) => String(value).trim()).filter(Boolean);
@@ -334,19 +334,19 @@
         lastError = error;
       }
     }
-    throw lastError || new Error("CPA 已保存插件配置，但等待策略文件生效超时。");
+    throw lastError || new Error("CPA saved the plugin config, but timed out waiting for the policy file to take effect.");
   }
 
   async function initializeDefaultPersistence() {
     const pluginList = await api(PATHS.pluginList, { method: "GET" });
     const pluginsDir = typeof pluginList?.plugins_dir === "string" ? pluginList.plugins_dir.trim() : "";
-    if (!pluginsDir) throw new Error("CPA 未返回有效的 plugins_dir。");
+    if (!pluginsDir) throw new Error("CPA did not return a valid plugins_dir.");
     const initialized = await api(PATHS.initializeStorage, {
       method: "POST",
       body: JSON.stringify({ plugins_dir: pluginsDir })
     });
     const policyFile = typeof initialized?.policy_file === "string" ? initialized.policy_file.trim() : "";
-    if (!policyFile) throw new Error("插件未返回默认策略文件路径。");
+    if (!policyFile) throw new Error("The plugin did not return a default policy file path.");
     await api(PATHS.pluginConfig, {
       method: "PATCH",
       body: JSON.stringify({ policy_file: policyFile })
@@ -362,7 +362,7 @@
       try {
         status = await initializeDefaultPersistence();
       } catch (error) {
-        persistenceSetupError = error.message || "自动创建插件策略文件失败。";
+        persistenceSetupError = error.message || "Failed to create the plugin policy file automatically.";
       }
     }
     const [policies, keyData] = await Promise.all([
@@ -418,12 +418,12 @@
     const token = readCPAMCManagementKey();
     if (!token) {
       state.token = "";
-      setSessionState("error", "未找到可复用的 CPAMC 会话", "自动接入要求 CPAMC 与 CPA 同源，并在登录时启用“记住密码”。请确认后返回此页面重试；插件不会要求你再次输入 Management Key。");
+      setSessionState("error", "No reusable CPAMC session found", "Automatic connection needs CPAMC on the same origin as CPA, logged in with \"Remember password\" on. Check that and come back to retry; the plugin never asks for the Management Key itself.");
       return;
     }
     state.token = token;
     state.sessionBusy = true;
-    setSessionState("loading", "正在接入管理会话", "正在验证 CPAMC 已保存的连接信息并加载模型策略…");
+    setSessionState("loading", "Connecting to management session", "Verifying the saved CPAMC connection and loading model policies…");
     try {
       const remote = await fetchRemoteData();
       const pendingDraft = state.pendingDraft;
@@ -442,9 +442,9 @@
     } catch (error) {
       state.token = "";
       const message = error.status === 401
-        ? "CPAMC 保存的 Management Key 已失效。请返回 CPAMC 重新登录并启用“记住密码”。"
-        : `无法连接 CPA：${error.message}`;
-      setSessionState("error", "管理会话不可用", message);
+        ? "The Management Key saved by CPAMC is no longer valid. Log in to CPAMC again with \"Remember password\" on."
+        : `Cannot reach CPA: ${error.message}`;
+      setSessionState("error", "Management session unavailable", message);
     } finally {
       state.sessionBusy = false;
     }
@@ -466,9 +466,9 @@
     state.sessionEnded = false;
     app.hidden = true;
     authGate.hidden = false;
-    setSessionState("error", "CPAMC 会话已结束", hadDraft
-      ? "未保存的策略草稿已保留在当前页面内存中。请重新登录；会话恢复后草稿会自动还原。"
-      : "请先在 CPAMC 重新登录并启用“记住密码”，页面会自动重新接入。");
+    setSessionState("error", "CPAMC session ended", hadDraft
+      ? "Your unsaved policy draft is kept in this page's memory. Log in again and it will be restored once the session is back."
+      : "Log in to CPAMC again with \"Remember password\" on; this page will reconnect automatically.");
   }
 
   function setBusy(busy, action = "") {
@@ -478,11 +478,11 @@
     saveButton.disabled = busy || state.modelBusy || !state.dirty;
     reloadButton.disabled = busy || state.modelBusy || !state.status?.persistent_updates;
     saveButton.innerHTML = action === "save" && busy
-      ? `${icons.spinner}<span class="label-long">正在保存</span>`
-      : `${icons.save}<span class="label-long">${state.dirty ? "保存修改" : "已保存"}</span>`;
+      ? `${icons.spinner}<span class="label-long">Saving</span>`
+      : `${icons.save}<span class="label-long">${state.dirty ? "Save changes" : "Saved"}</span>`;
     reloadButton.innerHTML = action === "reload" && busy
-      ? `${icons.spinner}<span class="label-long">正在重载</span>`
-      : `${icons.file}<span class="label-long">从文件重载</span>`;
+      ? `${icons.spinner}<span class="label-long">Reloading</span>`
+      : `${icons.file}<span class="label-long">Reload from file</span>`;
     refreshDataButton.innerHTML = action === "refresh" && busy
       ? icons.spinner
       : icons.refresh;
@@ -504,13 +504,13 @@
   function syncHeader() {
     const healthy = state.status && !state.status.last_error;
     const warning = state.status?.last_error;
-    healthBadge.innerHTML = `<span class="status-dot ${warning ? "warning" : healthy ? "" : "error"}"></span><span>${escapeHTML(warning ? "策略警告" : healthy ? `Schema v${state.status.schema_version || 2}` : "未连接")}</span>`;
-    healthBadge.title = warning ? state.status.last_error : "插件运行正常";
+    healthBadge.innerHTML = `<span class="status-dot ${warning ? "warning" : healthy ? "" : "error"}"></span><span>${escapeHTML(warning ? "Policy warning" : healthy ? `Schema v${state.status.schema_version || 2}` : "Disconnected")}</span>`;
+    healthBadge.title = warning ? state.status.last_error : "Plugin is healthy";
     saveButton.disabled = state.busy || state.modelBusy || !state.dirty;
     reloadButton.disabled = state.busy || state.modelBusy || !state.status?.persistent_updates;
-    reloadButton.title = state.status?.persistent_updates ? "从策略文件重载" : "未配置 policy_file，无法从文件重载";
-    saveButton.innerHTML = `${icons.save}<span class="label-long">${state.dirty ? "保存修改" : "已保存"}</span>`;
-    $("#policyCount").textContent = `${state.keys.length} 个当前 Key`;
+    reloadButton.title = state.status?.persistent_updates ? "Reload from policy file" : "No policy_file configured; cannot reload from file";
+    saveButton.innerHTML = `${icons.save}<span class="label-long">${state.dirty ? "Save changes" : "Saved"}</span>`;
+    $("#policyCount").textContent = `${state.keys.length} current keys`;
   }
 
   function syncPersistence() {
@@ -518,12 +518,12 @@
     if (!state.status) return;
     if (state.status.persistent_updates) {
       notice.className = "persistence-notice";
-      notice.textContent = `策略自动保存到 ${state.status.policy_file}`;
+      notice.textContent = `Policies are saved automatically to ${state.status.policy_file}`;
     } else {
       notice.className = "persistence-notice warning";
       notice.textContent = state.persistenceSetupError
-        ? `自动持久化失败：${state.persistenceSetupError} 当前修改仅保存在内存中。`
-        : "当前为内存模式；打开页面时会自动创建插件策略文件。";
+        ? `Automatic persistence failed: ${state.persistenceSetupError} Changes are kept in memory only.`
+        : "In-memory mode; the plugin policy file is created automatically when this page opens.";
     }
   }
 
@@ -543,14 +543,14 @@
     nav.innerHTML = `
       <button class="nav-item" type="button" data-select="overview" aria-current="${state.selectedIndex < 0 ? "page" : "false"}">
         <span class="nav-icon">${icons.overview}</span>
-        <span class="nav-copy"><strong>权限概览</strong><span>认证由 CPA 管理</span></span>
+        <span class="nav-copy"><strong>Overview</strong><span>Authentication is handled by CPA</span></span>
       </button>
-      <p class="nav-group-label">当前 CPA API Keys</p>
+      <p class="nav-group-label">Current CPA API keys</p>
       ${visible.length ? visible.map(({ key, index }) => `
-        <button class="nav-item" type="button" data-select="key" data-index="${index}" aria-current="${state.selectedIndex === index ? "page" : "false"}" aria-label="${escapeHTML(keyLabel(index))}，SHA-256 指纹 ${escapeHTML(key.fingerprint)}">
+        <button class="nav-item" type="button" data-select="key" data-index="${index}" aria-current="${state.selectedIndex === index ? "page" : "false"}" aria-label="${escapeHTML(keyLabel(index))}, SHA-256 fingerprint ${escapeHTML(key.fingerprint)}">
           <span class="nav-icon key">${icons.key}</span>
           <span class="nav-copy"><strong>${escapeHTML(keyLabel(index))}</strong><span>SHA-256 ${escapeHTML(key.fingerprint)}</span></span>
-        </button>`).join("") : `<p class="empty-nav">${query ? "没有匹配的 Key" : "CPA 当前没有 API Key"}</p>`}
+        </button>`).join("") : `<p class="empty-nav">${query ? "No matching keys" : "CPA has no API keys"}</p>`}
     `;
   }
 
@@ -572,44 +572,44 @@
     const defaults = state.keys.length - configured;
     const staleCount = state.stalePolicies.length;
     const statusWarning = state.status?.last_error
-      ? `<div class="notice">${icons.warning}<span><strong>最近一次配置存在问题：</strong> ${escapeHTML(state.status.last_error)}。当前仍在使用最后一个有效策略。</span></div>`
+      ? `<div class="notice">${icons.warning}<span><strong>The last configuration had a problem:</strong> ${escapeHTML(state.status.last_error)}. The last valid policy is still in effect.</span></div>`
       : "";
     const staleWarning = staleCount
-      ? `<div class="notice">${icons.warning}<span><strong>${staleCount} 条失效策略：</strong>这些 caller scope 不对应 CPA 当前 Key。保存时会原样保留，不会静默删除；请在确认旧 Key 已永久移除后通过策略文件处理。</span></div>`
+      ? `<div class="notice">${icons.warning}<span><strong>${staleCount} stale policies:</strong> these caller scopes match no current CPA key. Saving keeps them as they are rather than silently deleting them; once you are sure the old key is gone for good, remove them in the policy file.</span></div>`
       : "";
 
     editor.innerHTML = `
       <header class="editor-head">
         <div class="editor-title-wrap">
           <p class="editor-kicker">Access overview</p>
-          <h1>模型权限概览</h1>
-          <p class="editor-subtitle">API Key 的创建、删除和生命周期完全由 CPA 管理；此页面只为现有 Key 配置模型规则。</p>
+          <h1>Model access overview</h1>
+          <p class="editor-subtitle">CPA alone creates, deletes and manages API keys; this page only sets model rules for keys that already exist.</p>
         </div>
       </header>
       ${statusWarning}
       ${staleWarning}
-      <section class="overview-grid" aria-label="权限统计">
-        ${statCard("当前 CPA Key", state.keys.length, "只读同步")}
-        ${statCard("已配置", configured, "含 allow 或 deny")}
-        ${statCard("默认允许", defaults, "没有模型规则")}
-        ${statCard("失效策略", staleCount, "保存时仍保留", staleCount > 0)}
+      <section class="overview-grid" aria-label="Access statistics">
+        ${statCard("Current CPA keys", state.keys.length, "read-only sync")}
+        ${statCard("Configured", configured, "has allow or deny")}
+        ${statCard("Allowed by default", defaults, "no model rules")}
+        ${statCard("Stale policies", staleCount, "kept on save", staleCount > 0)}
       </section>
       <section class="card">
-        <div class="card-head"><h2>认证边界</h2><p>Key 身份与模型授权相互分离。</p></div>
+        <div class="card-head"><h2>Authentication boundary</h2><p>Key identity and model authorisation are separate.</p></div>
         <div class="info-callout">
           <span class="callout-icon">${icons.key}</span>
-          <div><strong>认证由 CPA 内置 API Keys 管理</strong><p>插件仅接收 CPA 提供的 caller scope，并据此执行 allow_models 与 deny_models。未配置策略或规则为空时，默认允许全部模型。</p></div>
+          <div><strong>Authentication is done by CPA's built-in API keys</strong><p>The plugin only receives the caller scope CPA provides and enforces allow_models and deny_models against it. With no policy, or empty rules, every model is allowed.</p></div>
         </div>
       </section>
       <section class="card">
-        <div class="card-head"><h2>运行状态</h2><p>来自当前 CPA 插件实例。</p></div>
-        ${statusRow("认证模式", displayAuthMode(state.status?.auth_mode))}
-        ${statusRow("身份来源", state.status?.identity_source || "—")}
-        ${statusRow("未配置 Key", state.status?.unconfigured_key_action === "allow" ? "允许全部模型" : state.status?.unconfigured_key_action || "—")}
-        ${statusRow("后端策略数", state.status?.policy_count ?? "—")}
-        ${statusRow("策略版本", `rev-${state.revision}`)}
-        ${statusRow("策略来源", state.status?.source || "—")}
-        ${statusRow("最后更新", formatDate(state.status?.updated_at))}
+        <div class="card-head"><h2>Runtime status</h2><p>From the running CPA plugin instance.</p></div>
+        ${statusRow("Auth mode", displayAuthMode(state.status?.auth_mode))}
+        ${statusRow("Identity source", state.status?.identity_source || "—")}
+        ${statusRow("Keys without a policy", state.status?.unconfigured_key_action === "allow" ? "All models allowed" : state.status?.unconfigured_key_action || "—")}
+        ${statusRow("Policies loaded", state.status?.policy_count ?? "—")}
+        ${statusRow("Policy revision", `rev-${state.revision}`)}
+        ${statusRow("Policy source", state.status?.source || "—")}
+        ${statusRow("Last updated", formatDate(state.status?.updated_at))}
       </section>`;
   }
 
@@ -618,7 +618,7 @@
   }
 
   function displayAuthMode(value) {
-    return value === "cpa_builtin_api_keys" ? "CPA 内置 API Keys" : value || "—";
+    return value === "cpa_builtin_api_keys" ? "CPA built-in API keys" : value || "—";
   }
 
   function statusRow(label, value) {
@@ -635,13 +635,13 @@
           <p class="editor-subtitle key-summary"><span>${key.mask}</span><span class="mono">SHA-256 ${escapeHTML(key.fingerprint)}</span></p>
         </div>
       </header>
-      ${empty ? `<div class="default-notice">${icons.check}<span><strong>当前默认允许全部模型。</strong>从目录中选择允许或拒绝模型后才会为此 Key 写入策略。</span></div>` : ""}
+      ${empty ? `<div class="default-notice">${icons.check}<span><strong>All models are currently allowed.</strong> A policy is written for this key only once you pick allowed or denied models from the catalogue.</span></div>` : ""}
       <section class="card rules-card">
-        <div class="card-head"><h2>模型规则</h2><p>直接从 CPA 可用模型目录中选择；拒绝规则始终优先于允许规则。</p></div>
-        ${modelPicker("allow_models", "允许模型", "设置后，仅允许列表中的模型", key.allow_models, false)}
-        ${modelPicker("deny_models", "拒绝模型", "命中后始终拒绝访问", key.deny_models, true)}
+        <div class="card-head"><h2>Model rules</h2><p>Pick straight from CPA's model catalogue; deny rules always win over allow rules.</p></div>
+        ${modelPicker("allow_models", "Allowed models", "When set, only these models are allowed", key.allow_models, false)}
+        ${modelPicker("deny_models", "Denied models", "Always refused when matched", key.deny_models, true)}
       </section>
-      <div class="privacy-note">Management Key 复用 CPAMC 已保存的同源会话；CPA API Key 只用于计算 caller scope 与读取模型目录，不会写入 DOM、浏览器存储或 URL。</div>`;
+      <div class="privacy-note">The Management Key comes from CPAMC's saved same-origin session; CPA API keys are used only to compute caller scopes and read the model catalogue, and are never written to the DOM, browser storage or URLs.</div>`;
     editor.dataset.keyIndex = String(index);
   }
 
@@ -653,21 +653,21 @@
     const effectiveCatalogCount = state.models.filter((model) => selected.has(model.id) || matchedRuleFor(model.id)).length;
     const isOpen = state.openPicker === kind;
     const summary = wildcardSelected
-      ? "全部模型（*，包含未来新增）"
+      ? "All models (*, including future ones)"
       : state.models.length
-        ? effectiveCatalogCount ? `已匹配 ${effectiveCatalogCount} / ${state.models.length} 个模型` : `从 ${state.models.length} 个模型中选择`
-        : selectedModels.length ? `已保留 ${selectedModels.length} 条现有规则` : "模型目录不可用";
+        ? effectiveCatalogCount ? `${effectiveCatalogCount} / ${state.models.length} models matched` : `Choose from ${state.models.length} models`
+        : selectedModels.length ? `${selectedModels.length} existing rules kept` : "Model catalogue unavailable";
     const chips = selectedModels.length
       ? selectedModels.map((model) => {
           const wildcard = model.includes("*") || model.includes("?");
           const outsideCatalog = !wildcard && !state.models.some((candidate) => candidate.id === model);
-          return `<span class="chip ${deny ? "deny" : ""}"><span>${escapeHTML(model)}</span>${wildcard ? '<small>通配符</small>' : outsideCatalog ? '<small>目录外</small>' : ""}<button class="chip-remove" type="button" data-action="remove-model" data-kind="${kind}" data-model="${escapeHTML(model)}" aria-label="移除此模型规则">${icons.close}</button></span>`;
+          return `<span class="chip ${deny ? "deny" : ""}"><span>${escapeHTML(model)}</span>${wildcard ? '<small>wildcard</small>' : outsideCatalog ? '<small>not in catalogue</small>' : ""}<button class="chip-remove" type="button" data-action="remove-model" data-kind="${kind}" data-model="${escapeHTML(model)}" aria-label="Remove this model rule">${icons.close}</button></span>`;
         }).join("")
-      : '<span class="empty-chips">尚未选择模型</span>';
-    const wildcardRow = `<button class="model-option wildcard-option ${wildcardSelected ? "selected" : ""}" type="button" role="option" aria-selected="${wildcardSelected}" data-action="toggle-model" data-kind="${kind}" data-model="*" data-search="全部模型 all models wildcard *">
+      : '<span class="empty-chips">No models selected</span>';
+    const wildcardRow = `<button class="model-option wildcard-option ${wildcardSelected ? "selected" : ""}" type="button" role="option" aria-selected="${wildcardSelected}" data-action="toggle-model" data-kind="${kind}" data-model="*" data-search="all models wildcard *">
       <span class="model-checkbox" aria-hidden="true">${wildcardSelected ? icons.check : ""}</span>
-      <span class="model-option-copy"><strong>全部模型</strong><small>${deny ? "* · 此 Key 将无法访问任何模型" : "* · 自动包含未来新增模型"}</small></span>
-      <span class="model-badge">通配符</span>
+      <span class="model-option-copy"><strong>All models</strong><small>${deny ? "* · this key will be refused every model" : "* · includes future models automatically"}</small></span>
+      <span class="model-badge">wildcard</span>
     </button>`;
     const commonWildcards = ["gpt-*", "claude-*", "gemini-*", "qwen-*", "deepseek-*", "grok-*", "kimi-*", "glm-*", "minimax-*"];
     const presetRows = commonWildcards.filter((rule) => selected.has(rule) || state.models.some((model) => modelPatternMatches(rule, model.id))).map((rule) => {
@@ -675,10 +675,10 @@
       const derived = wildcardSelected && !explicit;
       const checked = explicit || derived;
       const matchCount = state.models.filter((model) => modelPatternMatches(rule, model.id)).length;
-      return `<button class="model-option preset-option ${checked ? "selected" : ""} ${derived ? "derived" : ""}" type="button" role="option" aria-selected="${checked}" aria-disabled="${derived}" data-action="toggle-model" data-kind="${kind}" data-model="${rule}" data-locked="${derived}" data-search="${rule} 通配符 wildcard">
+      return `<button class="model-option preset-option ${checked ? "selected" : ""} ${derived ? "derived" : ""}" type="button" role="option" aria-selected="${checked}" aria-disabled="${derived}" data-action="toggle-model" data-kind="${kind}" data-model="${rule}" data-locked="${derived}" data-search="${rule} wildcard">
         <span class="model-checkbox" aria-hidden="true">${checked ? icons.check : ""}</span>
-        <span class="model-option-copy"><strong>${rule}</strong><small>当前匹配 ${matchCount} 个模型，并覆盖未来同前缀模型</small></span>
-        <span class="model-badge">通配符</span>
+        <span class="model-option-copy"><strong>${rule}</strong><small>matches ${matchCount} models now, plus future ones with this prefix</small></span>
+        <span class="model-badge">wildcard</span>
       </button>`;
     }).join("");
     const rows = state.models.map((model) => {
@@ -688,22 +688,22 @@
       const checked = explicit || derived;
       return `<button class="model-option ${checked ? "selected" : ""} ${derived ? "derived" : ""}" type="button" role="option" aria-selected="${checked}" aria-disabled="${derived}" data-action="toggle-model" data-kind="${kind}" data-model="${escapeHTML(model.id)}" data-locked="${derived}" data-search="${escapeHTML(`${model.id} ${model.displayName}`.toLowerCase())}">
         <span class="model-checkbox" aria-hidden="true">${checked ? icons.check : ""}</span>
-        <span class="model-option-copy"><strong>${escapeHTML(model.id)}</strong>${model.displayName ? `<small>${escapeHTML(model.displayName)}</small>` : ""}${derived ? `<small>由 ${escapeHTML(matchedRule)} 通配符匹配</small>` : ""}</span>
-        ${derived ? '<span class="model-badge">通配符</span>' : ""}
+        <span class="model-option-copy"><strong>${escapeHTML(model.id)}</strong>${model.displayName ? `<small>${escapeHTML(model.displayName)}</small>` : ""}${derived ? `<small>matched by wildcard ${escapeHTML(matchedRule)}</small>` : ""}</span>
+        ${derived ? '<span class="model-badge">wildcard</span>' : ""}
       </button>`;
     }).join("");
 
     return `<div class="model-editor ${deny ? "deny" : ""}">
-      <div class="tag-head"><div><strong>${escapeHTML(title)}</strong><span>${escapeHTML(description)}</span></div><span class="selection-count">${selectedModels.length} 条规则</span></div>
+      <div class="tag-head"><div><strong>${escapeHTML(title)}</strong><span>${escapeHTML(description)}</span></div><span class="selection-count">${selectedModels.length} rules</span></div>
       <button class="model-trigger ${isOpen ? "open" : ""}" type="button" data-action="toggle-picker" data-kind="${kind}" aria-expanded="${isOpen}">
         <span>${escapeHTML(summary)}</span><span class="picker-chevron" aria-hidden="true">⌄</span>
-        ${state.models.length ? `<progress class="selection-meter" max="${state.models.length}" value="${effectiveCatalogCount}" aria-label="已匹配 ${effectiveCatalogCount} / ${state.models.length} 个模型"></progress>` : ""}
+        ${state.models.length ? `<progress class="selection-meter" max="${state.models.length}" value="${effectiveCatalogCount}" aria-label="${effectiveCatalogCount} / ${state.models.length} models matched"></progress>` : ""}
       </button>
       ${isOpen ? `<div class="model-panel">
-        ${state.models.length ? `<div class="model-search"><span>${icons.search}</span><input type="search" data-model-search="${kind}" value="${escapeHTML(state.pickerQuery)}" autocomplete="off" placeholder="搜索模型…" aria-label="搜索${escapeHTML(title)}"></div>
-        <div class="model-list" role="listbox" aria-multiselectable="true">${wildcardRow}${presetRows}${rows}<p class="model-empty" hidden>没有匹配的模型</p></div>
-        <div class="model-panel-footer"><span>已匹配 ${effectiveCatalogCount} / ${state.models.length}</span><div><button type="button" data-action="select-all-models" data-kind="${kind}">全选当前目录</button><button type="button" data-action="clear-models" data-kind="${kind}">清空</button></div></div>`
-        : `<div class="model-list compact" role="listbox" aria-multiselectable="true">${wildcardRow}</div><div class="catalog-notice"><span>${escapeHTML(state.modelsError || "没有可用模型目录。")}</span><button type="button" data-action="refresh-models">重新加载</button></div>`}
+        ${state.models.length ? `<div class="model-search"><span>${icons.search}</span><input type="search" data-model-search="${kind}" value="${escapeHTML(state.pickerQuery)}" autocomplete="off" placeholder="Search models…" aria-label="Search ${escapeHTML(title)}"></div>
+        <div class="model-list" role="listbox" aria-multiselectable="true">${wildcardRow}${presetRows}${rows}<p class="model-empty" hidden>No matching models</p></div>
+        <div class="model-panel-footer"><span>${effectiveCatalogCount} / ${state.models.length} matched</span><div><button type="button" data-action="select-all-models" data-kind="${kind}">Select whole catalogue</button><button type="button" data-action="clear-models" data-kind="${kind}">Clear</button></div></div>`
+        : `<div class="model-list compact" role="listbox" aria-multiselectable="true">${wildcardRow}</div><div class="catalog-notice"><span>${escapeHTML(state.modelsError || "No model catalogue available.")}</span><button type="button" data-action="refresh-models">Reload</button></div>`}
       </div>` : ""}
       <div class="chips">${chips}</div>
     </div>`;
@@ -713,7 +713,7 @@
     if (!value) return "—";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
+    return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(date);
   }
 
   function selectedKey() {
@@ -775,13 +775,13 @@
     if (state.busy || state.modelBusy) return;
     setModelBusy(true);
     const retryButton = editor.querySelector('[data-action="refresh-models"]');
-    if (retryButton) { retryButton.disabled = true; retryButton.innerHTML = `${icons.spinner}<span>加载中</span>`; }
+    if (retryButton) { retryButton.disabled = true; retryButton.innerHTML = `${icons.spinner}<span>Loading</span>`; }
     try {
       const result = await fetchCurrentKeys({ includeCatalog: true });
       state.models = result.catalog?.models || [];
       state.modelsError = result.catalog?.error || "";
       renderEditor();
-      showToast(state.models.length ? `已加载 ${state.models.length} 个模型` : state.modelsError, state.models.length ? "success" : "error");
+      showToast(state.models.length ? `Loaded ${state.models.length} models` : state.modelsError, state.models.length ? "success" : "error");
     } finally {
       setModelBusy(false);
       syncHeader();
@@ -820,7 +820,7 @@
     try {
       const latestKeys = await fetchCurrentKeys();
       if (!setsEqual(scopeSet(state.keys), scopeSet(latestKeys))) {
-        const changed = new Error("CPA API Key 列表已变化；为避免策略错配，保存已中止。请刷新数据后重新检查规则。");
+        const changed = new Error("The CPA API key list changed, so saving was aborted to avoid attaching rules to the wrong key. Refresh and check the rules again.");
         changed.code = "key_set_changed";
         throw changed;
       }
@@ -844,27 +844,27 @@
       state.dirty = false;
       renderAll();
       if (keySetChangedAfterSave) {
-        showToast("策略已保存，但 CPA Key 列表在保存期间发生变化；新 Key 当前默认允许全部模型，请立即检查。", "error");
+        showToast("Policies saved, but the CPA key list changed while saving; any new key is allowed every model until you add rules. Check now.", "error");
       } else if (postSaveCheckError) {
-        showToast(`策略已保存，但无法复核 CPA Key 列表：${postSaveCheckError.message}`, "error");
+        showToast(`Policies saved, but the CPA key list could not be re-checked: ${postSaveCheckError.message}`, "error");
       } else {
-        showToast(response?.persistent ? "策略已保存并持久化" : "策略已保存到内存", "success");
+        showToast(response?.persistent ? "Policies saved and persisted" : "Policies saved in memory only", "success");
       }
       try {
         state.status = await api(PATHS.status, { method: "GET" });
         syncHeader();
         syncPersistence();
       } catch (refreshError) {
-        showToast(`策略已保存，但状态刷新失败：${refreshError.message}`, "error");
+        showToast(`Policies saved, but refreshing the status failed: ${refreshError.message}`, "error");
       }
     } catch (error) {
       if (error.code === "timeout") {
         const confirmed = await confirmTimedOutSave(submittedPolicy, expectedRevision);
-        showToast(confirmed ? "保存响应超时，但已重新读取并确认提交成功" : "保存结果无法确认；本地修改已保留，请刷新后核对。", confirmed ? "success" : "error");
+        showToast(confirmed ? "Saving timed out, but a re-read confirmed it was applied" : "Could not confirm the save; your local changes are kept. Refresh and check.", confirmed ? "success" : "error");
       } else if (error.code === "key_set_changed") {
-        showToast(error.message, "error", "刷新数据", refreshData);
+        showToast(error.message, "error", "Refresh", refreshData);
       } else if (error.status === 412) {
-        showToast("策略已被其他管理员或配置重载修改。请刷新数据后再保存。", "error", "刷新数据", refreshData);
+        showToast("Policies were changed by another admin or a config reload. Refresh before saving.", "error", "Refresh", refreshData);
       } else {
         showToast(error.message, "error");
       }
@@ -901,14 +901,14 @@
 
   async function refreshData() {
     if (state.busy) return;
-    if (state.dirty && !window.confirm("刷新会放弃尚未保存的模型规则。是否继续？")) return;
+    if (state.dirty && !window.confirm("Refreshing discards unsaved model rules. Continue?")) return;
     const preferredScope = selectedKey()?.scope || "";
     setBusy(true, "refresh");
     try {
       const remote = await fetchRemoteData();
       installRemoteData(remote, preferredScope);
       renderAll();
-      showToast("已刷新 CPA Key 与策略", "success");
+      showToast("CPA keys and policies refreshed", "success");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
@@ -919,7 +919,7 @@
 
   async function reload() {
     if (state.busy || !state.status?.persistent_updates) return;
-    if (state.dirty && !window.confirm("从策略文件重载会放弃尚未保存的模型规则。是否继续？")) return;
+    if (state.dirty && !window.confirm("Reloading from the policy file discards unsaved model rules. Continue?")) return;
     const preferredScope = selectedKey()?.scope || "";
     setBusy(true, "reload");
     let reloaded = false;
@@ -929,9 +929,9 @@
       const remote = await fetchRemoteData();
       installRemoteData(remote, preferredScope);
       renderAll();
-      showToast("已从策略文件重载", "success");
+      showToast("Reloaded from policy file", "success");
     } catch (error) {
-      showToast(reloaded ? `策略已重载，但界面刷新失败：${error.message}` : error.message, "error");
+      showToast(reloaded ? `Policies reloaded, but refreshing the page failed: ${error.message}` : error.message, "error");
     } finally {
       setBusy(false);
       syncHeader();
@@ -980,8 +980,8 @@
     document.documentElement.classList.toggle("is-embedded", window.self !== window.top);
     $("#searchIcon").innerHTML = icons.search;
     refreshDataButton.innerHTML = icons.refresh;
-    reloadButton.innerHTML = `${icons.file}<span class="label-long">从文件重载</span>`;
-    saveButton.innerHTML = `${icons.save}<span class="label-long">已保存</span>`;
+    reloadButton.innerHTML = `${icons.file}<span class="label-long">Reload from file</span>`;
+    saveButton.innerHTML = `${icons.save}<span class="label-long">Saved</span>`;
     syncTheme();
     try {
       if (window.self !== window.top) {
