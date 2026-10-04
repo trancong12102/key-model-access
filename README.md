@@ -1,31 +1,46 @@
-# CPA Key Model Access 插件
+# CPA Key Model Access plugin
 
-CLIProxyAPI（CPA）原生动态库插件。CPA 继续使用顶层 `api-keys` 完成下游认证；本插件只在 RequestInterceptor 中读取 CPA 提供的 `Metadata.caller_scope`，为**已经存在的 CPA API Key**执行模型 allow/deny。
+A native dynamic-library plugin for CLIProxyAPI (CPA). CPA keeps doing downstream authentication
+with its top-level `api-keys`; this plugin only reads the `Metadata.caller_scope` CPA provides to
+its RequestInterceptor and enforces model allow/deny rules for **API keys that already exist in
+CPA**.
 
-> `0.1.x` 相对 `0.0.2` 是 breaking pre-1 minor。v1 策略不兼容，从 0.0.2 升级前必须完成下文的迁移步骤。
+> This is a fork of [LTbinglingfeng/key-model-access](https://github.com/LTbinglingfeng/key-model-access)
+> v0.1.3. Its only changes: the settings UI is in English, and CI no longer builds FreeBSD
+> (the 14.3-RELEASE base archive it downloaded is gone). Releases are tagged `v<upstream>-en`.
 
-## 工作边界
+> `0.1.x` is a breaking pre-1 minor relative to `0.0.2`. The v1 policy format is incompatible;
+> follow the migration steps below before upgrading from 0.0.2.
 
-- API Key 的创建、删除、保存和认证完全由 CPA 内置 provider 负责。
-- 插件不创建、删除或保存原始 Key，也不提供 Key 管理或认证 provider；Web UI 只读获取现有 CPA Key 以关联 scope。
-- CPA 认证成功后把稳定的 `caller_scope` 放入 RequestInterceptor Metadata；插件只用该 scope 查找模型策略。
-- 没有关联策略的现有 Key 默认允许全部模型。
-- 已有关联策略时：`deny_models` 优先；`allow_models` 非空时作为白名单；`allow_models` 为空时允许所有未被 deny 的模型。
-- `*` 匹配任意长度字符（包括 `/`），`?` 匹配一个字符；匹配区分大小写。
-- 模型名优先取 CPA 的 `RequestedModel`，为空时取 `Model`。
+## Scope
 
-本插件不是认证层。未知或无效 Key 是否可用，由 CPA 顶层 `api-keys` 决定；不要把 Key 只写在插件配置中。
+- Creating, deleting, storing and authenticating API keys is entirely CPA's built-in provider's job.
+- The plugin does not create, delete or store raw keys and is not an authentication provider. The
+  Web UI only reads the existing CPA keys to associate scopes with them.
+- After CPA authenticates a request it puts a stable `caller_scope` into the RequestInterceptor
+  metadata; the plugin uses that scope alone to look up the model policy.
+- Existing keys without a policy may use every model.
+- With a policy: `deny_models` wins; a non-empty `allow_models` is an allowlist; an empty
+  `allow_models` allows everything not denied.
+- `*` matches any run of characters (including `/`), `?` matches one character; matching is
+  case-sensitive.
+- The model name is CPA's `RequestedModel`, or `Model` when that is empty.
 
-## 兼容性
+The plugin is not an authentication layer. Whether an unknown or invalid key is accepted is decided
+by CPA's top-level `api-keys`; never put a key only in the plugin config.
 
-- CLIProxyAPI **v7.2.103 或更新版本**。
-- CPA 插件 RPC schema 2，用于 RequestInterceptor 主动返回结构化 `403`。
-- 支持 CPA 动态插件的 CGO 构建；需要 Go 1.24、C 编译器和 `CGO_ENABLED=1`。
-- 可通过任一 Management API 响应头 `X-CPA-SUPPORT-PLUGIN: 1` 确认 CPA 二进制支持插件。
+## Compatibility
 
-## 安装
+- CLIProxyAPI **v7.2.103 or newer**.
+- CPA plugin RPC schema 2, which lets a RequestInterceptor return a structured `403`.
+- A CGO build of CPA with dynamic plugin support; building needs Go 1.24, a C compiler and
+  `CGO_ENABLED=1`.
+- Any Management API response carrying the header `X-CPA-SUPPORT-PLUGIN: 1` confirms the CPA binary
+  supports plugins.
 
-### 1. 构建或安装动态库
+## Install
+
+### 1. Build or install the dynamic library
 
 ```bash
 make test
@@ -33,44 +48,47 @@ make build
 make package
 ```
 
-macOS arm64 使用默认版本时会生成：
+On macOS arm64 with the default version this produces:
 
 ```text
 dist/key-model-access.dylib
-dist/key-model-access_0.1.3_darwin_arm64.zip
-dist/key-model-access_0.1.3_darwin_arm64.zip.sha256
+dist/key-model-access_0.1.3-en_darwin_arm64.zip
+dist/key-model-access_0.1.3-en_darwin_arm64.zip.sha256
 ```
 
-动态库扩展名：
+Library extensions:
 
-- macOS：`key-model-access.dylib`
-- Linux / FreeBSD：`key-model-access.so`
-- Windows：`key-model-access.dll`
+- macOS: `key-model-access.dylib`
+- Linux / FreeBSD: `key-model-access.so`
+- Windows: `key-model-access.dll`
 
-自动安装到本机 CPA 平台目录：
+Install into the local CPA platform directory:
 
 ```bash
 make install CPA_DIR=/path/to/CLIProxyAPI
 ```
 
-也可手动复制到：
+or copy it by hand to:
 
 ```text
 <CPA>/plugins/<GOOS>/<GOARCH>/key-model-access.<ext>
 ```
 
-动态库基础 ID 必须是 `key-model-access`，并与 `plugins.configs.key-model-access` 一致；也可使用 CPA 支持的 `key-model-access-v<version>.<ext>` 后缀。`c-shared` 产物应在目标系统上构建，不能只设置 `GOOS` 做普通交叉编译。
+The library's base ID must be `key-model-access` and match `plugins.configs.key-model-access`; the
+`key-model-access-v<version>.<ext>` suffix CPA supports also works. Build `c-shared` artifacts on the
+target system; setting `GOOS` for an ordinary cross-compile is not enough.
 
-可覆盖构建参数：
+Build parameters can be overridden:
 
 ```bash
 make build GOOS=darwin GOARCH=arm64 BUILD_DIR=/path/to/plugins/darwin/arm64
-make package VERSION=0.1.3
+make package VERSION=0.1.3-en
 ```
 
-### 2. 配置 CPA Key 与空的 v2 策略
+### 2. Configure CPA keys and an empty v2 policy
 
-将 [`config.example.yaml`](./config.example.yaml) 合并到 CPA `config.yaml`。首次启动建议使用内联空策略，不要引用尚不存在的文件：
+Merge [`config.example.yaml`](./config.example.yaml) into CPA's `config.yaml`. For the first start,
+use an inline empty policy rather than pointing at a file that doesn't exist yet:
 
 ```yaml
 api-keys:
@@ -87,98 +105,148 @@ plugins:
       policies: []
 ```
 
-此状态下，CPA 顶层 `api-keys` 仍负责认证，插件对所有已认证 Key 默认允许全部模型。随后应在维护窗口内通过 Web UI 为需要限制的 Key 生成 v2 策略。
+In this state CPA's top-level `api-keys` still authenticate, and every authenticated key may use
+every model. Then, in a maintenance window, use the Web UI to create v2 policies for the keys that
+need limits.
 
-### 3. 默认持久化
+### 3. Default persistence
 
-首次打开 Web UI 时，页面会通过 CPA 官方 Management API 读取实际的 `plugins.dir`，自动创建：
+The first time the Web UI opens, it reads the actual `plugins.dir` through CPA's official
+Management API and creates:
 
 ```text
 <plugins.dir>/key-model-access/config.toml
 ```
 
-随后页面会将该路径写入 `plugins.configs.key-model-access.policy_file`，由 CPA 保存配置并触发插件重配置。初始化会保留当前有效的内联 v2 策略；若目标文件已经存在，只会校验并复用，不会覆盖。之后 UI 修改会以 `0600` 权限原子保存，CPA 或插件重启后仍然存在。
+It then writes that path into `plugins.configs.key-model-access.policy_file`, which CPA saves before
+reconfiguring the plugin. Initialisation keeps the currently effective inline v2 policies; if the
+target file already exists it is validated and reused, never overwritten. Later UI edits are saved
+atomically with mode `0600` and survive CPA or plugin restarts.
 
-之所以由 Web UI 发现目录，而不是由动态库猜测自身路径，是因为 CPA 的插件 ABI 不传递 `plugins.dir`，该目录可自定义，且 Windows 会从临时 shadow copy 加载 DLL。
+The Web UI discovers the directory, rather than the library guessing its own path, because CPA's
+plugin ABI does not pass `plugins.dir`, the directory is configurable, and Windows loads DLLs from a
+temporary shadow copy.
 
-如需把策略放到其他位置，可显式配置已有的 YAML 或 TOML 文件：
+To keep policies somewhere else, configure an existing YAML or TOML file explicitly:
 
 ```yaml
 policy_file: "config/key-model-access-policies.yaml"
 ```
 
-显式目标必须预先存在且是有效的 v2 文档；不存在或无效时插件会 fail closed。相对路径以 CPA 工作目录为准。配置了 `policy_file` 后，该文件是权威策略来源；内联 `version` / `policies` 不再生效。
+An explicit target must already exist and be a valid v2 document; if it is missing or invalid the
+plugin fails closed. Relative paths are resolved from CPA's working directory. Once `policy_file` is
+set, that file is the authoritative policy source and inline `version` / `policies` no longer apply.
 
-Docker 部署应以**可写**方式持久化整个插件目录：
+Docker deployments must persist the whole plugin directory **writable**:
 
 ```yaml
 volumes:
   - ./plugins:/CLIProxyAPI/plugins
 ```
 
-若显式使用其他策略目录，也要持久化整个目录。不要只 bind mount 单个策略文件；插件使用同目录临时文件、`fsync` 和 `rename` 原子替换，单文件挂载通常会阻止保存。插件目录只读或 CPA 配置文件不可写时，自动初始化会在 UI 中报告错误并继续使用内存模式。
+If you use another policy directory, persist that whole directory too. Don't bind-mount a single
+policy file: the plugin saves through a temporary file in the same directory, `fsync` and `rename`,
+which a single-file mount usually prevents. If the plugin directory is read-only or CPA's config
+file is not writable, automatic initialisation reports an error in the UI and the plugin keeps
+running in memory-only mode.
 
-## 从 0.0.2 / v1 升级
+## Upgrading from 0.0.2 / v1
 
-v1 的 Key 身份和 v2 的 `caller_scope` 架构不同，旧策略不能原地转换。升级前必须：
+v1 key identities and v2 `caller_scope` are different designs, so old policies cannot be converted
+in place. Before upgrading:
 
-1. 在受控维护窗口内停止外部流量，并备份 CPA 配置和旧策略。
-2. 确保每个仍需使用的**原始 Key**都保留或迁移到 CPA 顶层 `api-keys`。只有旧 `key_sha256` 而没有原始 Key 时，无法把该凭据恢复到 CPA；应创建替代 Key 并更新客户端。
-3. 从插件配置和旧策略中移除 v1 字段：`keys`、`default_action`、`models_endpoint`、`allow_query_keys`。
-4. 移除指向 v1 文件的 `policy_file`，先改为内联 `version: 2`、`policies: []`。不要让 0.1.0 读取 v1 文件；它会拒绝 v1 并在首次启动时 fail closed。
-5. 安装 0.1.0 并重启 CPA，先验证顶层 Key 仍由 CPA 正常认证。
-6. 打开 Web UI，读取当前 CPA Key，并为需要限制的 Key **重新生成 v2 策略**。
-7. 打开新版 Web UI，让它自动创建并配置默认 `config.toml`，重新核对并保存。若使用显式自定义路径，则先创建有效的 v2 文件。
+1. In a controlled maintenance window, stop external traffic and back up the CPA config and the old
+   policies.
+2. Make sure every **raw key** still in use is kept in, or moved to, CPA's top-level `api-keys`. A
+   credential known only by its old `key_sha256` cannot be restored into CPA; create a replacement
+   key and update its clients.
+3. Remove the v1 fields from the plugin config and old policies: `keys`, `default_action`,
+   `models_endpoint`, `allow_query_keys`.
+4. Remove any `policy_file` pointing at a v1 file and switch to inline `version: 2`,
+   `policies: []`. Don't let 0.1.0 read a v1 file; it rejects v1 and fails closed on first start.
+5. Install 0.1.0 and restart CPA; first confirm the top-level keys still authenticate normally.
+6. Open the Web UI, load the current CPA keys and **recreate the v2 policies** for the keys that
+   need limits.
+7. Let the new Web UI create and configure the default `config.toml`, then re-check and save. With
+   an explicit custom path, create a valid v2 file first.
 
-空 v2 策略会默认允许所有已认证 Key 调用所有被拦截器覆盖的模型。迁移期间应保持外部流量关闭，直到限制策略已重新生成并验证。
+An empty v2 policy allows every authenticated key to call every model the interceptor covers. Keep
+external traffic off during migration until the limiting policies are recreated and verified.
 
 ## Web UI
 
-插件启用后访问：
+With the plugin enabled, open:
 
 ```text
 http://<CPA_HOST>:<CPA_PORT>/v0/resource/plugins/key-model-access/settings
 ```
 
-页面会以“模型权限”注册到支持插件资源菜单的 CPAMC 管理界面。UI 不再要求重复输入 Management Key，而是只读复用 CPAMC 已保存的 `cli-proxy-auth` 同源会话，并自动同步 CPAMC 的主题。自动接入要求：
+The page registers as "Model Access" in CPAMC management UIs that support plugin resource menus.
+It does not ask for the Management Key: it reuses, read-only, the same-origin `cli-proxy-auth`
+session CPAMC already saved, and follows CPAMC's theme. Automatic connection requires:
 
-- CPAMC 页面与 CPA API 使用相同 origin（协议、主机和端口均相同）；
-- 登录 CPAMC 时启用“记住密码”，使 Management Key 存在于 CPAMC 的 Local Storage 会话中。
+- the CPAMC page and the CPA API on the same origin (scheme, host and port);
+- "Remember password" enabled when logging in to CPAMC, so the Management Key is in CPAMC's
+  Local Storage session.
 
-条件不满足时，页面会提示返回 CPAMC 修复会话，不提供手工密钥输入。接入成功后 UI 会：
+Otherwise the page asks you to go back to CPAMC and fix the session; it offers no manual key entry.
+Once connected the UI:
 
-1. 若尚未持久化，读取 CPA 的 `plugins_dir`，创建 `<plugins.dir>/key-model-access/config.toml`，再通过 CPA 官方插件配置 API 写入 `policy_file`；
-2. `GET /v0/management/api-keys`，只读获取 CPA 当前顶层 Key；
-3. 在浏览器内按 CPA 的规则计算对应 `caller_scope`；
-4. 临时使用第一个 CPA API Key 读取 `GET /v1/models`，生成可搜索、多选的模型目录；
-5. 读取插件 v2 策略并按 scope 关联；
-6. 通过选择器编辑、保存 `allow_models` 和 `deny_models`。选择器提供精确模型、全部模型 `*` 及当前目录可识别的常用模型家族通配符；已有的其他自定义通配符会继续保留并显示其目录匹配结果。
+1. if nothing is persisted yet, reads CPA's `plugins_dir`, creates
+   `<plugins.dir>/key-model-access/config.toml`, then writes `policy_file` through CPA's official
+   plugin config API;
+2. calls `GET /v0/management/api-keys` to read CPA's current top-level keys, read-only;
+3. computes each key's `caller_scope` in the browser, using CPA's rule;
+4. reads `GET /v1/models` with the first CPA API key to build a searchable, multi-select model
+   catalogue;
+5. reads the plugin's v2 policies and matches them to scopes;
+6. lets you edit and save `allow_models` and `deny_models` with the picker. The picker offers exact
+   models, all models `*`, and wildcards for common model families it recognises in the catalogue;
+   other existing custom wildcards are kept and shown with their catalogue matches.
 
-UI 不创建、修改或删除 CPA Key，也不会向 `/v0/management/api-keys` 发出写请求。Key 生命周期仍应通过 CPA 配置或 CPA 自身管理能力完成。UI 会在策略保存前后核对 CPA Key 集合：保存前发现变化会中止并要求刷新；保存后发现变化会立即警告新 Key 当前默认允许全部。两次请求之间仍无法形成事务，因此 Key 变更和策略保存应由运维流程串行化。不再对应当前 Key 的旧 scope 会标记为失效策略，并在保存时保留，避免静默删除。
+The UI never creates, changes or deletes CPA keys and never writes to `/v0/management/api-keys`.
+Key lifecycle stays with CPA's config or CPA's own management features. The UI compares the CPA key
+set before and after saving policies: a change before saving aborts and asks for a refresh; a change
+after saving warns immediately that the new key is currently allowed everything. The two requests
+are not a transaction, so key changes and policy saves should be serialised by your operating
+process. Old scopes that no longer match a current key are flagged as stale policies and kept on
+save rather than silently deleted.
 
-### UI 安全边界
+### UI security boundaries
 
-- `/v0/management/api-keys` 会把原始 Key 返回给已通过 Management 认证的浏览器。UI 仅在 JavaScript 中短暂用于计算 scope，并用第一个 Key 读取模型目录；随后尽力清空临时数组。原始 Key 不会写入 DOM、Local Storage、Session Storage、URL 或插件策略。
-- Management Key 由 CPAMC 决定是否持久化。插件只读解析 CPAMC 的同源会话，在自己的 JavaScript 内存中使用，不会复制或再次写入存储。
-- CPAMC 当前的浏览器端存储是可逆混淆，不是安全边界。同源页面、浏览器扩展和同机恶意软件均属于信任边界。
-- 页面只读同步 CPAMC 的主题，不再维护独立主题偏好。
-- 页面响应使用随机 nonce CSP、`frame-ancestors 'self'`、`X-Frame-Options: SAMEORIGIN`、`form-action 'none'` 和 `Cache-Control: no-store`。
-- 应使用 HTTPS、限制 Management API 的网络可达范围，并只在可信浏览器和设备中打开 UI。
-- 页面壳不包含 Key 或策略数据；所有 Management API 数据请求都受 CPA Management Key 保护。
+- `/v0/management/api-keys` returns raw keys to a browser holding Management authentication. The UI
+  keeps them in JavaScript only briefly, to compute scopes and to read the model catalogue with the
+  first key, then clears the temporary array as best it can. Raw keys are never written to the DOM,
+  Local Storage, Session Storage, URLs or the plugin policy.
+- Whether the Management Key is persisted is CPAMC's decision. The plugin only parses CPAMC's
+  same-origin session, read-only, uses it in its own JavaScript memory, and never copies it or
+  writes it to storage again.
+- CPAMC's current browser-side storage is reversible obfuscation, not a security boundary.
+  Same-origin pages, browser extensions and malware on the same machine are all inside the trust
+  boundary.
+- The page follows CPAMC's theme read-only and keeps no theme preference of its own.
+- Page responses use a random-nonce CSP, `frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`,
+  `form-action 'none'` and `Cache-Control: no-store`.
+- Use HTTPS, restrict network reachability of the Management API, and open the UI only on trusted
+  browsers and devices.
+- The page shell contains no keys or policy data; every Management API data request is protected by
+  the CPA Management Key.
 
-## 策略 schema v2
+## Policy schema v2
 
-v2 文档顶层只有 `version` 和 `policies`。每条策略只有：
+A v2 document has only `version` and `policies` at the top level. Each policy has only:
 
-- `caller_scope`：CPA 为已有 API Key 派生的 64 位十六进制 scope；应由 Web UI 生成并关联，不是原始 Key，也不是旧版 `key_sha256`。
-- `allow_models`：允许模式数组。
-- `deny_models`：拒绝模式数组。
+- `caller_scope`: the 64-hex-character scope CPA derives for an existing API key. Let the Web UI
+  generate and associate it; it is neither the raw key nor the old `key_sha256`.
+- `allow_models`: array of allow patterns.
+- `deny_models`: array of deny patterns.
 
-推荐不要手工猜测或复用旧哈希。使用 UI 获取 CPA 当前 Key 并生成正确 scope。
+Don't guess or reuse old hashes by hand; use the UI to load CPA's current keys and generate the
+right scope.
 
 ### YAML
 
-参见 [`policies.example.yaml`](./policies.example.yaml)：
+See [`policies.example.yaml`](./policies.example.yaml):
 
 ```yaml
 version: 2
@@ -193,7 +261,7 @@ policies:
 
 ### TOML
 
-默认生成的 `config.toml` 使用同一 schema：
+The generated `config.toml` uses the same schema:
 
 ```toml
 version = 2
@@ -206,7 +274,7 @@ deny_models = ["*-preview"]
 
 ### JSON
 
-Management API 的 PUT 请求体使用同一 schema：
+The Management API PUT body uses the same schema:
 
 ```json
 {
@@ -221,31 +289,36 @@ Management API 的 PUT 请求体使用同一 schema：
 }
 ```
 
-匹配语义：
+Matching:
 
-1. Key 没有对应策略：允许全部模型。
-2. 命中任意 `deny_models`：拒绝，优先级最高。
-3. `allow_models` 非空：只有命中 allow 且未命中 deny 才允许。
-4. `allow_models` 为空：允许所有未命中 deny 的模型。
-5. allow 和 deny 都为空等同于允许全部；UI 通常不会为这种 Key 写入策略。
+1. Key has no policy: every model is allowed.
+2. Any `deny_models` match: refused; this takes precedence over everything.
+3. Non-empty `allow_models`: allowed only on an allow match with no deny match.
+4. Empty `allow_models`: everything not denied is allowed.
+5. Empty allow and deny lists equal allow-all; the UI normally writes no policy for such a key.
 
-YAML、TOML 和 JSON 都严格拒绝未知字段、重复 `caller_scope` 和非 64 位十六进制 scope。旧的 `key`、`key_sha256`、`id`、`enabled` 等身份字段不会被接受。
+YAML, TOML and JSON all strictly reject unknown fields, duplicate `caller_scope` values and scopes
+that are not 64 hex characters. Old identity fields such as `key`, `key_sha256`, `id` and `enabled`
+are not accepted.
 
 ## Management API
 
-插件路由由 CPA Management Key 保护：
+The plugin routes are protected by the CPA Management Key:
 
-| 方法 | 路径 | 用途 |
+| Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/v0/management/plugins/key-model-access/status` | 查看版本、策略来源、持久化和 fail-closed 状态；不返回 scope |
-| `GET` | `/v0/management/plugins/key-model-access/policies` | 获取完整 v2 策略和 revision |
-| `PUT` | `/v0/management/plugins/key-model-access/policies` | 用 JSON 原子替换全部策略 |
-| `POST` | `/v0/management/plugins/key-model-access/reload` | 从已配置的 `policy_file` 重载 |
-| `POST` | `/v0/management/plugins/key-model-access/initialize-storage` | 在给定的 CPA 插件根目录创建或校验默认 `config.toml` |
+| `GET` | `/v0/management/plugins/key-model-access/status` | Version, policy source, persistence and fail-closed state; no scopes |
+| `GET` | `/v0/management/plugins/key-model-access/policies` | The full v2 policy document and its revision |
+| `PUT` | `/v0/management/plugins/key-model-access/policies` | Atomically replace all policies with JSON |
+| `POST` | `/v0/management/plugins/key-model-access/reload` | Reload from the configured `policy_file` |
+| `POST` | `/v0/management/plugins/key-model-access/initialize-storage` | Create or validate the default `config.toml` under the given CPA plugin root |
 
-UI 还会调用 CPA 自带的 `GET /v0/management/plugins` 获取实际插件目录，并通过 `PATCH /v0/management/plugins/key-model-access/config` 仅写入 `policy_file`。它会只读调用 `GET /v0/management/api-keys`；该接口会向已授权管理客户端返回 CPA Key，请勿记录或转发响应。
+The UI also calls CPA's own `GET /v0/management/plugins` to find the real plugin directory, and
+`PATCH /v0/management/plugins/key-model-access/config` to write `policy_file` only. It calls
+`GET /v0/management/api-keys` read-only; that endpoint returns CPA keys to authorised management
+clients, so never log or forward its response.
 
-准备变量并查询状态：
+Set variables and check status:
 
 ```bash
 export CPA_URL=http://127.0.0.1:8317
@@ -256,7 +329,7 @@ curl -sS \
   "$CPA_URL/v0/management/plugins/key-model-access/status"
 ```
 
-读取策略并保留响应中的 `ETag: "rev-N"`：
+Read the policies and keep the `ETag: "rev-N"` from the response:
 
 ```bash
 curl -i \
@@ -264,7 +337,7 @@ curl -i \
   "$CPA_URL/v0/management/plugins/key-model-access/policies"
 ```
 
-整体替换策略：
+Replace all policies:
 
 ```bash
 curl -sS -X PUT \
@@ -286,13 +359,18 @@ curl -sS -X PUT \
 JSON
 ```
 
-`GET policies` 返回 revision 和 ETag。携带 `If-Match` 可避免覆盖并发修改；revision 不匹配时返回 `412`。为兼容调用方，当前后端仍接受不带 `If-Match` 的 PUT，但不推荐。
+`GET policies` returns the revision and an ETag. Sending `If-Match` prevents overwriting concurrent
+changes; a revision mismatch returns `412`. For compatibility the backend still accepts a PUT
+without `If-Match`, but that is not recommended.
 
-配置 `policy_file` 后，PUT 会以 `0600` 权限原子持久化；Web UI 会在首次打开时自动完成默认配置。自动初始化失败或尚未打开 UI 时，未配置文件的 PUT 仍只更新内存。reload 在未配置文件时返回 `409`，文件无效时保留最后一个有效策略并报告错误。
+With `policy_file` configured, a PUT is persisted atomically with mode `0600`; the Web UI sets this
+up automatically the first time it opens. If automatic initialisation failed or the UI has not been
+opened yet, a PUT without a configured file only updates memory. Reload returns `409` when no file
+is configured; with an invalid file it keeps the last valid policy and reports the error.
 
-## 验证
+## Verification
 
-查看 CPA 已注册插件：
+List the plugins CPA registered:
 
 ```bash
 curl -sS \
@@ -300,11 +378,11 @@ curl -sS \
   "$CPA_URL/v0/management/plugins"
 ```
 
-确认状态至少包含：
+The status should include at least:
 
 ```json
 {
-  "version": "0.1.3",
+  "version": "0.1.3-en",
   "schema_version": 2,
   "auth_mode": "cpa_builtin_api_keys",
   "identity_source": "Metadata.caller_scope",
@@ -313,29 +391,30 @@ curl -sS \
 }
 ```
 
-使用同一个 CPA 顶层 Key 测试允许和拒绝模型：
+Test allowed and refused models with the same top-level CPA key:
 
 ```bash
-# 应允许
+# should be allowed
 curl -i "$CPA_URL/v1/chat/completions" \
   -H 'Authorization: Bearer your-existing-cpa-key' \
   -H 'Content-Type: application/json' \
   -d '{"model":"gpt-5","messages":[{"role":"user","content":"hi"}]}'
 
-# 若策略只 allow gpt-5*，应由插件返回结构化 403，且请求不应到达上游
+# with a policy allowing only gpt-5*, the plugin returns a structured 403 and the request never
+# reaches the upstream
 curl -i "$CPA_URL/v1/chat/completions" \
   -H 'Authorization: Bearer your-existing-cpa-key' \
   -H 'Content-Type: application/json' \
   -d '{"model":"claude-sonnet","messages":[{"role":"user","content":"hi"}]}'
 
-# 不在 CPA 顶层 api-keys 中的 Key 应由 CPA 认证层拒绝，而不是由插件管理
+# a key not in CPA's top-level api-keys is refused by CPA's auth layer, not by this plugin
 curl -i "$CPA_URL/v1/chat/completions" \
   -H 'Authorization: Bearer unknown-key' \
   -H 'Content-Type: application/json' \
   -d '{"model":"gpt-5","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-本地质量检查：
+Local quality checks:
 
 ```bash
 gofmt -w types.go
@@ -344,57 +423,72 @@ go vet ./...
 git diff --check
 ```
 
-## 当前限制
+## Current limits
 
-CPA 的 RequestInterceptor 目前没有完整覆盖以下路径或流程：
+CPA's RequestInterceptor does not yet fully cover these paths or flows:
 
 - `/v1/models`
 - `alpha/search`
-- Codex Live（包括相关实时/sideband 流程）
+- Codex Live (including its realtime/sideband flows)
 
-因此不要依赖本插件对这些功能实施完整的 per-Key 模型隔离。`/v1/models` 可能返回 CPA 全局模型列表。对于确实进入 RequestInterceptor 的请求，已配置策略的 Key 若缺少模型名会 fail closed；未配置策略的 Key 仍按默认规则允许。若上述未覆盖入口必须受限，应在 CPA/上游 provider 配置、反向代理或网络层禁用或限制，直到 CPA 提供完整 hook 覆盖。
+So don't rely on this plugin for complete per-key model isolation there; `/v1/models` may return
+CPA's global model list. For requests that do reach the RequestInterceptor, a key with a policy but
+no model name fails closed; keys without a policy are still allowed by default. If those uncovered
+entry points must be restricted, disable or limit them in CPA/upstream provider config, a reverse
+proxy or the network layer until CPA provides full hook coverage.
 
-此外：
+Also:
 
-- 本插件只约束进入 RequestInterceptor 且带可识别模型名的请求，不过滤 CPA 的全局模型目录。
-- 有策略存在但 CPA 未提供 `caller_scope` 时，已覆盖请求会 fail closed；完全空策略时，没有 scope 的请求不会由插件拒绝，认证仍由 CPA 负责。
-- 首次加载无效配置、旧 v1 文件或不存在的 `policy_file` 会使插件策略 fail closed；后续无效热更新会保留最后一个有效快照。
-- 策略变化只影响后续请求，不会中断已经在上游执行的请求。
+- The plugin only constrains requests that reach the RequestInterceptor with a recognisable model
+  name; it doesn't filter CPA's global model catalogue.
+- When policies exist but CPA provides no `caller_scope`, covered requests fail closed; with a
+  completely empty policy, requests without a scope are not refused by the plugin, and
+  authentication stays with CPA.
+- An invalid config, an old v1 file or a missing `policy_file` on first load makes the plugin fail
+  closed; later invalid hot reloads keep the last valid snapshot.
+- Policy changes affect only later requests; requests already running upstream are not interrupted.
 
-## 安全说明
+## Security notes
 
-- 原生插件与 CPA 同进程运行，只安装可信构建产物。
-- 原始 API Key 只应存在于 CPA 顶层 `api-keys`；不要放进插件配置、策略文件或 PUT 请求。
-- `caller_scope` 是稳定的伪名标识，仍应视为敏感管理数据；不要公开策略响应和文件。
-- Management API 响应设置 `Cache-Control: no-store`；应限制 Management Key 权限并定期轮换。
-- 默认策略位于 `<plugins.dir>/key-model-access/config.toml`；应限制插件目录权限并将该插件专属子目录纳入安全备份。显式 `policy_file` 同样应仅允许 CPA 进程用户访问。
-- 无策略默认允许全部。新增 CPA Key 后，应及时在 UI 中刷新并配置限制；需要默认拒绝的新 Key 接入流程时，应在外层自动化或网络边界中实现。
+- Native plugins run inside the CPA process; install only trusted builds.
+- Raw API keys belong only in CPA's top-level `api-keys`; never put them in the plugin config, the
+  policy file or a PUT body.
+- `caller_scope` is a stable pseudonymous identifier and still sensitive management data; don't
+  publish policy responses or files.
+- Management API responses set `Cache-Control: no-store`; limit Management Key access and rotate it
+  regularly.
+- The default policy lives at `<plugins.dir>/key-model-access/config.toml`; restrict the plugin
+  directory's permissions and include this plugin's subdirectory in secure backups. An explicit
+  `policy_file` should likewise be readable only by the CPA process user.
+- No policy means allow-all. After adding a CPA key, refresh the UI and configure its limits promptly;
+  if new keys must be deny-by-default, do that in outer automation or at the network boundary.
 
-## 构建与发布产物
+## Build and release artifacts
 
-GitHub Actions 工作流 [`.github/workflows/build.yml`](./.github/workflows/build.yml) 负责测试、构建和发布格式。版本 0.1.3 的压缩包命名为：
+The GitHub Actions workflow [`.github/workflows/build.yml`](./.github/workflows/build.yml) runs tests,
+builds, and publishes the release format. For version 0.1.3-en the archives are:
 
 ```text
-key-model-access_0.1.3_<goos>_<goarch>.zip
+key-model-access_0.1.3-en_<goos>_<goarch>.zip
 checksums.txt
 ```
 
-本地生成当前平台压缩包和聚合校验文件：
+Build the current platform's archive and the aggregate checksum file locally:
 
 ```bash
-make checksums VERSION=0.1.3
+make checksums VERSION=0.1.3-en
 ```
 
-维护者创建 0.1.3 发布标签的示例：
+Release by pushing a tag:
 
 ```bash
-git tag -a v0.1.3 -m "Release v0.1.3"
-git push origin v0.1.3
+git tag -a v0.1.3-en -m "Release v0.1.3-en"
+git push origin v0.1.3-en
 ```
 
-## 官方资料
+## Upstream documentation
 
-- https://help.router-for.me/cn/plugin/development
-- https://help.router-for.me/cn/plugin/request-interceptor
-- https://help.router-for.me/cn/plugin/management-api
+- https://help.router-for.me/plugin/development
+- https://help.router-for.me/plugin/request-interceptor
+- https://help.router-for.me/plugin/management-api
 - https://github.com/router-for-me/CLIProxyAPI/tree/main/examples/plugin
