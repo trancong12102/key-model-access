@@ -6,8 +6,9 @@ its RequestInterceptor and enforces model allow/deny rules for **API keys that a
 CPA**.
 
 > This is a fork of [LTbinglingfeng/key-model-access](https://github.com/LTbinglingfeng/key-model-access)
-> v0.1.3. Its only changes: the settings UI is in English, and CI no longer builds FreeBSD
-> (the 14.3-RELEASE base archive it downloaded is gone). Releases are tagged `v<upstream>-en`.
+> v0.1.3. Its only changes: the settings UI is in English and applies CPAMC's dark theme before
+> the first paint, and CI no longer builds FreeBSD (the 14.3-RELEASE base archive it downloaded
+> is gone). Releases are tagged `v<upstream>-en.<n>`.
 
 > `0.1.x` is a breaking pre-1 minor relative to `0.0.2`. The v1 policy format is incompatible;
 > follow the migration steps below before upgrading from 0.0.2.
@@ -52,8 +53,8 @@ On macOS arm64 with the default version this produces:
 
 ```text
 dist/key-model-access.dylib
-dist/key-model-access_0.1.3-en_darwin_arm64.zip
-dist/key-model-access_0.1.3-en_darwin_arm64.zip.sha256
+dist/key-model-access_0.1.3-en.1_darwin_arm64.zip
+dist/key-model-access_0.1.3-en.1_darwin_arm64.zip.sha256
 ```
 
 Library extensions:
@@ -82,7 +83,7 @@ Build parameters can be overridden:
 
 ```bash
 make build GOOS=darwin GOARCH=arm64 BUILD_DIR=/path/to/plugins/darwin/arm64
-make package VERSION=0.1.3-en
+make package VERSION=0.1.3-en.1
 ```
 
 ### 2. Configure CPA keys and an empty v2 policy
@@ -382,7 +383,7 @@ The status should include at least:
 
 ```json
 {
-  "version": "0.1.3-en",
+  "version": "0.1.3-en.1",
   "schema_version": 2,
   "auth_mode": "cpa_builtin_api_keys",
   "identity_source": "Metadata.caller_scope",
@@ -466,24 +467,24 @@ Also:
 ## Build and release artifacts
 
 The GitHub Actions workflow [`.github/workflows/build.yml`](./.github/workflows/build.yml) runs tests,
-builds, and publishes the release format. For version 0.1.3-en the archives are:
+builds, and publishes the release format. For version 0.1.3-en.1 the archives are:
 
 ```text
-key-model-access_0.1.3-en_<goos>_<goarch>.zip
+key-model-access_0.1.3-en.1_<goos>_<goarch>.zip
 checksums.txt
 ```
 
 Build the current platform's archive and the aggregate checksum file locally:
 
 ```bash
-make checksums VERSION=0.1.3-en
+make checksums VERSION=0.1.3-en.1
 ```
 
 Release by pushing a tag:
 
 ```bash
-git tag -a v0.1.3-en -m "Release v0.1.3-en"
-git push origin v0.1.3-en
+git tag -a v0.1.3-en.1 -m "Release v0.1.3-en.1"
+git push origin v0.1.3-en.1
 ```
 
 ## Upstream documentation
