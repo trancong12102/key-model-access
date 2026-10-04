@@ -13,7 +13,6 @@
   };
 
   const CPAMC_AUTH_KEY = "cli-proxy-auth";
-  const CPAMC_THEME_KEY = "cli-proxy-theme";
   const OBFUSCATION_PREFIX = "enc::v1::";
   const OBFUSCATION_SALT = "cli-proxy-api-webui::secure-storage";
 
@@ -954,45 +953,15 @@
     }
   }
 
-  function resolveCPAMCTheme() {
-    try {
-      if (window.self !== window.top) {
-        const parentTheme = window.parent.document.documentElement.getAttribute("data-theme");
-        return parentTheme === "dark" || parentTheme === "white" ? parentTheme : "light";
-      }
-    } catch (_) { /* same-origin storage remains the fallback */ }
-    try {
-      const persisted = JSON.parse(localStorage.getItem(CPAMC_THEME_KEY) || "null");
-      const theme = persisted?.state?.theme;
-      if (theme === "dark" || theme === "white" || theme === "light") return theme;
-      if (theme === "auto") return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white";
-    } catch (_) { /* use system preference */ }
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white";
-  }
-
-  function syncTheme() {
-    const theme = resolveCPAMCTheme();
-    if (theme === "light") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.dataset.theme = theme;
-  }
-
   function initializeChrome() {
-    document.documentElement.classList.toggle("is-embedded", window.self !== window.top);
     $("#searchIcon").innerHTML = icons.search;
     refreshDataButton.innerHTML = icons.refresh;
     reloadButton.innerHTML = `${icons.file}<span class="label-long">Reload from file</span>`;
     saveButton.innerHTML = `${icons.save}<span class="label-long">Saved</span>`;
-    syncTheme();
-    try {
-      if (window.self !== window.top) {
-        new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-      }
-    } catch (_) { /* cross-origin embedding is unsupported for session reuse */ }
   }
 
   $("#retrySessionButton").addEventListener("click", connectFromCPAMC);
   window.addEventListener("storage", (event) => {
-    if (event.key === CPAMC_THEME_KEY) syncTheme();
     if (event.key !== CPAMC_AUTH_KEY && event.key !== "isLoggedIn") return;
     if (app.hidden) {
       connectFromCPAMC();

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-//go:embed web/settings.html web/settings.css web/settings.js
+//go:embed web/settings.html web/settings.css web/settings.js web/theme.js
 var webAssets embed.FS
 
 func settingsPage() ([]byte, error) {
@@ -25,6 +25,10 @@ func settingsPage() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read settings script: %w", err)
 	}
+	themeScript, err := webAssets.ReadFile("web/theme.js")
+	if err != nil {
+		return nil, fmt.Errorf("read theme script: %w", err)
+	}
 	nonce, err := contentNonce()
 	if err != nil {
 		return nil, err
@@ -34,6 +38,7 @@ func settingsPage() ([]byte, error) {
 		"{{NONCE}}", nonce,
 		"{{CSS}}", string(styles),
 		"{{JS}}", string(script),
+		"{{THEME_JS}}", string(themeScript),
 	).Replace(string(template))
 	csp := strings.Join([]string{
 		"default-src 'none'",
